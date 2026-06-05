@@ -587,7 +587,15 @@ async function initDID() {
   try {
     const r    = await fetch('/api/did/session', { method:'POST' });
     const sess = await r.json();
-    if (!sess.id) { setConn('err','فشل الاتصال'); return; }
+    if (!sess.id) {
+      // D-ID session couldn't be created (bad/missing key, no credits, plan
+      // doesn't cover streaming). Degrade gracefully: no avatar animation, but
+      // the user can still talk to Majed and hear replies via browser TTS.
+      console.warn('D-ID session failed:', sess);
+      setConn('err','الصورة المتحركة غير متاحة — الصوت يعمل');
+      $micBtn.disabled = false; setMode('idle');
+      return;
+    }
 
     S.streamId  = sess.id;
     S.sessionId = sess.session_id;
@@ -613,9 +621,18 @@ async function initDID() {
       });
     };
 
+    // The connection is "ready" only when ICE actually reaches connected/
+    // completed. Do NOT force S.connected=true before that — otherwise the UI
+    // claims to be connected while no media stream is flowing (frozen photo,
+    // no idle animation, no audio).
     S.pc.oniceconnectionstatechange = () => {
-      if (S.pc.iceConnectionState === 'connected') {
-        S.connected = true; setConn('ok','متصل');
+      const st = S.pc.iceConnectionState;
+      if (st === 'connected' || st === 'completed') {
+        if (!S.connected) { S.connected = true; setConn('ok','متصل'); }
+      } else if (st === 'failed' || st === 'closed') {
+        S.connected = false; setConn('err','انقطع الاتصال');
+      } else if (st === 'disconnected') {
+        setConn('err','جاري إعادة الاتصال...');
       }
     };
 
@@ -628,9 +645,16 @@ async function initDID() {
       body: JSON.stringify({ streamId:S.streamId, sessionId:S.sessionId, answer })
     });
 
-    setConn('ok','متصل'); S.connected = true;
+    // The mic must stay usable even if WebRTC never establishes — the browser
+    // TTS fallback still lets Majed reply by voice. So enable input now, but
+    // leave S.connected false until ICE confirms (controls D-ID speak path).
+    $micBtn.disabled = false;
+    setMode('idle');
+    if (!S.connected) setConn('connecting','جاري تجهيز الصورة...');
   } catch (e) {
     console.error(e); setConn('err','خطأ في الاتصال');
+    // Even on failure, let the user talk to Majed via the TTS fallback.
+    $micBtn.disabled = false; setMode('idle');
   }
 }
 
@@ -663,6 +687,44 @@ function stopViz() {
   wbars.forEach((b, i) => { b.style.height = DEFAULT_H[i] + 'px'; });
 }
 
+// ── Browser TTS fallback (used when D-ID can't render) ──────────────────────────
+// speechSynthesis voices load asynchronously; on first call getVoices() is often
+// empty. Resolve the list once, then pick the best Arabic voice (or any voice) so
+// the reply is never silently dropped.
+function loadVoices() {
+  return new Promise((resolve) => {
+    const v = speechSynthesis.getVoices();
+    if (v.length) return resolve(v);
+    speechSynthesis.addEventListener('voiceschanged', () => resolve(speechSynthesis.getVoices()), { once:true });
+    // Safety timeout — resolve with whatever we have rather than hanging
+    setTimeout(() => resolve(speechSynthesis.getVoices()), 1000);
+  });
+}
+
+async function browserSpeak(text) {
+  if (!('speechSynthesis' in window)) { setMode('idle'); return; }
+  const voices = await loadVoices();
+  const arVoice =
+    voices.find(v => /^ar-EG/i.test(v.lang)) ||
+    voices.find(v => /^ar/i.test(v.lang)) ||
+    null;
+
+  try { speechSynthesis.cancel(); } catch {}
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = arVoice ? arVoice.lang : 'ar-EG';
+  if (arVoice) utt.voice = arVoice;
+  utt.rate = 0.95;
+  utt.onend = () => setMode('idle');
+  utt.onerror = () => setMode('idle');
+  setMode('speaking');
+  speechSynthesis.speak(utt);
+
+  if (!arVoice) {
+    // No Arabic voice installed on this OS — tell the user instead of failing mute
+    console.warn('No Arabic TTS voice installed; using default system voice.');
+  }
+}
+
 // ── Chat → Avatar speak ────────────────────────────────────────────────────────
 async function sendToMajed(text) {
   if (!text.trim()) return;
@@ -679,6 +741,7 @@ async function sendToMajed(text) {
     showCard(reply);
 
     let didSpeak = false;
+    // Only use the D-ID lip-sync stream when WebRTC is genuinely connected.
     if (S.connected && S.streamId) {
       setMode('speaking');
       const sr = await fetch('/api/did/speak', {
@@ -689,20 +752,18 @@ async function sendToMajed(text) {
         didSpeak = true;
         setTimeout(() => setMode('idle'), reply.length * 85 + 1500);
       } else {
-        // D-ID couldn't speak (e.g. ElevenLabs needs paid plan / out of credits)
+        // D-ID couldn't render (out of credits, plan doesn't cover streaming,
+        // invalid voice, etc). Surface it so it's not a silent failure.
         const err = await sr.json().catch(() => ({}));
-        console.warn('D-ID speak failed:', err);
+        console.warn('D-ID speak failed:', sr.status, err);
+        setConn('err', 'الصوت المتحرك غير متاح — استخدام صوت بديل');
       }
     }
 
     if (!didSpeak) {
-      // Browser TTS fallback — at least the user hears the reply
-      try { speechSynthesis.cancel(); } catch {}
-      const utt = new SpeechSynthesisUtterance(reply);
-      utt.lang = 'ar-EG';
-      utt.onend = () => setMode('idle');
-      setMode('speaking');
-      speechSynthesis.speak(utt);
+      // Browser TTS fallback — guarantees the user hears the reply even with no
+      // working D-ID stream.
+      await browserSpeak(reply);
     }
   } catch {
     showCard('عذراً، حدث خطأ. حاول مرة أخرى.');
