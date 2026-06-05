@@ -439,7 +439,7 @@ body {
       <div class="av-ring"   aria-hidden="true"></div>
       <div class="av-ripple" aria-hidden="true"></div>
       <div class="av-circle">
-        <video id="avideo" autoplay playsinline muted></video>
+        <video id="avideo" autoplay playsinline></video>
         <div class="av-ph" id="avPh" aria-hidden="true">
           <!-- SVG avatar placeholder -->
           <svg width="86" height="86" viewBox="0 0 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -594,12 +594,16 @@ async function initDID() {
     S.pc = new RTCPeerConnection({ iceServers: sess.ice_servers });
 
     S.pc.ontrack = (e) => {
+      if (!e.streams[0]) return;
+      // Always update srcObject so both audio + video tracks are captured
+      $video.srcObject = e.streams[0];
+      $video.muted = false;
       if (e.track.kind === 'video') {
-        $video.srcObject = e.streams[0];
         $video.style.display = 'block';
         $avPh.style.display  = 'none';
-        $video.muted = false;
       }
+      // play() is required after srcObject changes in some browsers
+      $video.play().catch(() => {});
     };
 
     S.pc.onicecandidate = async ({ candidate }) => {
@@ -716,6 +720,12 @@ if (SR) {
   rec.onerror = () => { stopViz(); setMode('idle'); };
 
   $micBtn.addEventListener('click', async () => {
+    // Unmute video on first user gesture (browser autoplay policy)
+    if ($video.srcObject && $video.muted) {
+      $video.muted = false;
+      $video.play().catch(() => {});
+    }
+
     if (S.mode === 'listening') {
       rec.stop(); stopViz(); setMode('idle'); return;
     }
