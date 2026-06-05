@@ -33,7 +33,7 @@ app.post('/api/did/session', async (req, res) => {
       body: JSON.stringify({
         source_url: AVATAR_IMAGE_URL,
         driver_url: 'bank://lively',
-        config: { stitch: true }
+        config: { stitch: true, fluent: true }
       })
     });
     const data = await resp.json();
@@ -99,10 +99,10 @@ app.post('/api/did/speak', async (req, res) => {
           provider: {
             type: 'elevenlabs',
             voice_id: process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB', // Arabic male
-            voice_config: { stability: 0.5, similarity_boost: 0.75 }
+            voice_config: { stability: 0.55, similarity_boost: 0.80, style: 0.2, use_speaker_boost: true }
           }
         },
-        config: { fluent: true, pad_audio: 0 }
+        config: { fluent: true, pad_audio: 0.2 }
       })
     });
     const data = await resp.json();
