@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ماجد — مساعد إنجوسوفت الذكي</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --blue: #1a3a6b; --accent: #2563eb; --gold: #f59e0b;
+  --bg: #0f172a; --surface: #1e293b; --surface2: #273549;
+  --text: #f1f5f9; --muted: #94a3b8; --border: #334155;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Cairo',sans-serif; background:var(--bg); color:var(--text); height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+
+.header { background:linear-gradient(135deg,#1a3a6b,#0f2552); padding:12px 20px; display:flex; align-items:center; gap:12px; border-bottom:1px solid rgba(37,99,235,.3); flex-shrink:0; box-shadow:0 4px 20px rgba(0,0,0,.4); }
+.logo { width:36px;height:36px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#0f172a; }
+.hinfo h1 { font-size:16px;font-weight:700; }
+.hinfo p  { font-size:12px;color:#93c5fd; }
+.dot { width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:auto;box-shadow:0 0 8px #22c55e;animation:pd 2s infinite; }
+@keyframes pd { 0%,100%{opacity:1}50%{opacity:.4} }
+
+.main { display:flex;flex:1;overflow:hidden; }
+
+.avatar-panel { width:320px;flex-shrink:0;background:linear-gradient(180deg,#0d1f3c,#0a1628);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;border-left:1px solid var(--border);position:relative;overflow:hidden; }
+.avatar-panel::before { content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(37,99,235,.15),transparent 70%);pointer-events:none; }
+
+.avatar-box { position:relative;width:260px;border-radius:24px;overflow:hidden;background:#0d1f3c;border:2px solid rgba(37,99,235,.4);box-shadow:0 0 40px rgba(37,99,235,.2),0 20px 60px rgba(0,0,0,.5); }
+#avideo { width:100%;aspect-ratio:1;object-fit:cover;display:none;background:#0d1f3c; }
+.aplaceholder { width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:90px; }
+.sring { position:absolute;inset:-4px;border-radius:28px;border:3px solid transparent;transition:border-color .3s; }
+.sring.on { border-color:var(--accent);box-shadow:0 0 20px rgba(37,99,235,.6);animation:rp 1s infinite; }
+@keyframes rp { 0%,100%{opacity:1}50%{opacity:.5} }
+
+.aname { margin-top:16px;text-align:center; }
+.aname h2 { font-size:20px;font-weight:900;background:linear-gradient(135deg,#60a5fa,#93c5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent; }
+.aname p  { font-size:12px;color:var(--muted);margin-top:4px; }
+
+.abars { display:flex;gap:3px;align-items:flex-end;height:24px;margin-top:12px;opacity:0;transition:opacity .3s; }
+.abars.on { opacity:1; }
+.bar { width:4px;background:var(--accent);border-radius:2px; }
+.bar:nth-child(1){height:8px;animation:bb .6s 0s   infinite alternate}
+.bar:nth-child(2){height:16px;animation:bb .6s .1s infinite alternate}
+.bar:nth-child(3){height:24px;animation:bb .6s .2s infinite alternate}
+.bar:nth-child(4){height:16px;animation:bb .6s .1s infinite alternate}
+.bar:nth-child(5){height:8px;animation:bb .6s 0s   infinite alternate}
+@keyframes bb { from{transform:scaleY(.3)}to{transform:scaleY(1)} }
+
+.cstatus { margin-top:12px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px; }
+.cdot { width:6px;height:6px;border-radius:50%;background:var(--muted);transition:background .3s; }
+.cdot.ok  { background:#22c55e; }
+.cdot.ing { background:var(--gold);animation:pd 1s infinite; }
+
+.chat-panel { flex:1;display:flex;flex-direction:column;overflow:hidden; }
+
+.msgs { flex:1;overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent; }
+.msgs::-webkit-scrollbar{width:4px}
+.msgs::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.msg { display:flex;gap:10px;max-width:85%;animation:mi .3s ease; }
+@keyframes mi { from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)} }
+.msg.user { align-self:flex-start;flex-direction:row-reverse; }
+.msg.bot  { align-self:flex-end; }
+
+.mavatar { width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700; }
+.msg.user .mavatar { background:var(--accent); }
+.msg.bot  .mavatar { background:linear-gradient(135deg,#1e40af,#1d4ed8); }
+
+.bubble { padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.7; }
+.msg.user .bubble { background:var(--accent);color:white;border-top-left-radius:4px; }
+.msg.bot  .bubble { background:var(--surface);color:var(--text);border-top-right-radius:4px;border:1px solid var(--border); }
+
+.typing { display:none;align-self:flex-end;background:var(--surface);border:1px solid var(--border);border-radius:16px;border-top-right-radius:4px;padding:12px 16px;gap:5px;align-items:center; }
+.typing.show { display:flex; }
+.tdot { width:7px;height:7px;border-radius:50%;background:var(--accent);animation:ty 1.2s infinite; }
+.tdot:nth-child(2){animation-delay:.2s}
+.tdot:nth-child(3){animation-delay:.4s}
+@keyframes ty { 0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1} }
+
+.input-area { padding:12px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-end;flex-shrink:0; }
+.iwrap { flex:1;background:var(--bg);border:1px solid var(--border);border-radius:16px;display:flex;align-items:center;padding:4px 4px 4px 12px;gap:8px;transition:border-color .2s; }
+.iwrap:focus-within { border-color:var(--accent); }
+#uinput { flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Cairo',sans-serif;font-size:14px;resize:none;max-height:100px;line-height:1.5;padding:6px 0; }
+#uinput::placeholder { color:var(--muted); }
+.bmicro { width:36px;height:36px;border:none;cursor:pointer;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;transition:all .2s;flex-shrink:0; }
+.bmicro:hover { background:var(--accent);color:white; }
+.bmicro.rec { background:#ef4444;color:white;animation:pd 1s infinite; }
+.bsend { width:44px;height:44px;border:none;cursor:pointer;background:var(--accent);border-radius:16px;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;transition:all .2s;flex-shrink:0; }
+.bsend:hover { background:#1d4ed8;transform:scale(1.05); }
+.bsend:disabled { background:var(--border);cursor:not-allowed;transform:none; }
+
+@media(max-width:600px){ .avatar-panel{display:none} }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">م</div>
+  <div class="hinfo">
+    <h1>ماجد — إنجوسوفت</h1>
+    <p>مساعدك التعليمي الذكي</p>
+  </div>
+  <div class="dot"></div>
+</div>
+
+<div class="main">
+  <div class="avatar-panel">
+    <div class="avatar-box" id="abox">
+      <div class="sring" id="sring"></div>
+      <video id="avideo" autoplay playsinline muted></video>
+      <div class="aplaceholder" id="aph">🧑‍💼</div>
+    </div>
+    <div class="aname">
+      <h2>م. ماجد</h2>
+      <p>مستشار تعليمي • إنجوسوفت</p>
+    </div>
+    <div class="abars" id="abars">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div>
+    </div>
+    <div class="cstatus">
+      <div class="cdot ing" id="cdot"></div>
+      <span id="ctxt">جاري الاتصال...</span>
+    </div>
+  </div>
+
+  <div class="chat-panel">
+    <div class="msgs" id="msgs">
+      <div class="msg bot">
+        <div class="mavatar">🤖</div>
+        <div class="bubble">السلام عليكم! أنا ماجد، مساعدك الذكي في إنجوسوفت 👋<br>كيف أقدر أساعدك اليوم؟</div>
+      </div>
+    </div>
+    <div class="typing" id="typing">
+      <div class="tdot"></div><div class="tdot"></div><div class="tdot"></div>
+    </div>
+    <div class="input-area">
+      <div class="iwrap">
+        <textarea id="uinput" placeholder="اكتب رسالتك هنا..." rows="1"></textarea>
+        <button class="bmicro" id="bmic" title="تحدث">🎤</button>
+      </div>
+      <button class="bsend" id="bsend" title="إرسال">➤</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = { streamId:null, sessionId:null, pc:null, history:[], connected:false, speaking:false };
+
+const $v    = document.getElementById('avideo');
+const $ph   = document.getElementById('aph');
+const $ring = document.getElementById('sring');
+const $bars = document.getElementById('abars');
+const $cdot = document.getElementById('cdot');
+const $ctxt = document.getElementById('ctxt');
+const $msgs = document.getElementById('msgs');
+const $typ  = document.getElementById('typing');
+const $inp  = document.getElementById('uinput');
+const $send = document.getElementById('bsend');
+const $mic  = document.getElementById('bmic');
+
+function setConn(state, txt) {
+  $cdot.className = 'cdot ' + (state === 'ok' ? 'ok' : 'ing');
+  $ctxt.textContent = txt;
+}
+
+function setSpeaking(on) {
+  S.speaking = on;
+  $ring.className = 'sring' + (on ? ' on' : '');
+  $bars.className = 'abars' + (on ? ' on' : '');
+}
+
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = `<div class="mavatar">${role === 'user' ? '👤' : '🤖'}</div><div class="bubble">${text}</div>`;
+  $msgs.appendChild(div);
+  $msgs.scrollTop = $msgs.scrollHeight;
+  if (role === 'bot') S.history.push({ role: 'model', parts: [{ text }] });
+  else S.history.push({ role: 'user', parts: [{ text }] });
+}
+
+// ── D-ID WebRTC Init ──────────────────────────────────────────────────────────
+async function initDID() {
+  try {
+    const r = await fetch('/api/did/session', { method: 'POST' });
+    const sess = await r.json();
+    if (!sess.id) { setConn('err', 'فشل الاتصال'); return; }
+
+    S.streamId   = sess.id;
+    S.sessionId  = sess.session_id;
+
+    const { RTCPeerConnection, RTCSessionDescription } = window;
+    S.pc = new RTCPeerConnection({ iceServers: sess.ice_servers });
+
+    S.pc.ontrack = (e) => {
+      if (e.track.kind === 'video') {
+        $v.srcObject = e.streams[0];
+        $v.style.display = 'block';
+        $ph.style.display = 'none';
+        $v.muted = false;
+      }
+    };
+
+    S.pc.onicecandidate = async ({ candidate }) => {
+      if (candidate) {
+        await fetch('/api/did/ice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ streamId: S.streamId, sessionId: S.sessionId, candidate })
+        });
+      }
+    };
+
+    S.pc.oniceconnectionstatechange = () => {
+      if (S.pc.iceConnectionState === 'connected') {
+        S.connected = true;
+        setConn('ok', 'متصل');
+      }
+    };
+
+    await S.pc.setRemoteDescription(new RTCSessionDescription(sess.offer));
+    const answer = await S.pc.createAnswer();
+    await S.pc.setLocalDescription(answer);
+
+    await fetch('/api/did/sdp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: S.streamId, sessionId: S.sessionId, answer })
+    });
+
+    setConn('ok', 'متصل');
+    S.connected = true;
+
+  } catch(e) {
+    console.error(e);
+    setConn('err', 'خطأ في الاتصال');
+  }
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+async function sendMessage(text) {
+  if (!text.trim()) return;
+  $send.disabled = true;
+  addMsg('user', text);
+  $typ.classList.add('show');
+  $msgs.scrollTop = $msgs.scrollHeight;
+
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: S.history.slice(-10) })
+    });
+    const { reply } = await r.json();
+    $typ.classList.remove('show');
+    addMsg('bot', reply);
+
+    // Make avatar speak
+    if (S.connected && S.streamId) {
+      setSpeaking(true);
+      await fetch('/api/did/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamId: S.streamId, sessionId: S.sessionId, text: reply })
+      });
+      setTimeout(() => setSpeaking(false), reply.length * 80 + 1000);
+    }
+  } catch(e) {
+    $typ.classList.remove('show');
+    addMsg('bot', 'عذراً، حدث خطأ. حاول مرة أخرى.');
+  }
+
+  $send.disabled = false;
+  $inp.value = '';
+  $inp.style.height = 'auto';
+}
+
+// ── Voice Input ───────────────────────────────────────────────────────────────
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SR();
+  rec.lang = 'ar-SA'; rec.continuous = false; rec.interimResults = false;
+  rec.onresult = (e) => {
+    $inp.value = e.results[0][0].transcript;
+    $mic.classList.remove('rec');
+    sendMessage($inp.value);
+  };
+  rec.onend = () => $mic.classList.remove('rec');
+  $mic.onclick = () => {
+    $mic.classList.toggle('rec');
+    $mic.classList.contains('rec') ? rec.start() : rec.stop();
+  };
+} else {
+  $mic.style.display = 'none';
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+$send.onclick = () => sendMessage($inp.value);
+$inp.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage($inp.value); }
+});
+$inp.addEventListener('input', () => {
+  $inp.style.height = 'auto';
+  $inp.style.height = Math.min($inp.scrollHeight, 100) + 'px';
+});
+
+// Init
+initDID();
+</script>
+</body>
+</html>
