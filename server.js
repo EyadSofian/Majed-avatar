@@ -37,8 +37,13 @@ app.post('/api/did/session', async (req, res) => {
       })
     });
     const data = await resp.json();
+    if (!resp.ok) {
+      console.error('D-ID session failed:', resp.status, JSON.stringify(data));
+      return res.status(resp.status).json({ error: data.description || data.message || 'D-ID session failed', details: data });
+    }
     res.json(data);
   } catch (e) {
+    console.error('session error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -82,6 +87,30 @@ app.post('/api/did/ice', async (req, res) => {
 });
 
 // ─── Make Majed Speak via D-ID ────────────────────────────────────────────────
+// TTS provider selection:
+//   - 'microsoft' (DEFAULT): free / works on D-ID trial accounts. Arabic neural voices.
+//   - 'elevenlabs': requires a PAID D-ID plan. Set TTS_PROVIDER=elevenlabs to use.
+// Microsoft Arabic voices: ar-EG-ShakirNeural (Egyptian male), ar-SA-HamedNeural (Saudi male),
+//                          ar-EG-SalmaNeural (Egyptian female), ar-SA-ZariyahNeural (Saudi female)
+function buildProvider() {
+  const provider = (process.env.TTS_PROVIDER || 'microsoft').toLowerCase();
+
+  if (provider === 'elevenlabs') {
+    return {
+      type: 'elevenlabs',
+      voice_id: process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB',
+      voice_config: { stability: 0.55, similarity_boost: 0.80, style: 0.2, use_speaker_boost: true }
+    };
+  }
+
+  // Microsoft (default) — free on D-ID, works on trial
+  return {
+    type: 'microsoft',
+    voice_id: process.env.MICROSOFT_VOICE_ID || 'ar-EG-ShakirNeural',
+    voice_config: { style: 'Friendly', rate: '0.95' }
+  };
+}
+
 app.post('/api/did/speak', async (req, res) => {
   const { streamId, sessionId, text } = req.body;
   try {
@@ -96,18 +125,20 @@ app.post('/api/did/speak', async (req, res) => {
         script: {
           type: 'text',
           input: text,
-          provider: {
-            type: 'elevenlabs',
-            voice_id: process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB', // Arabic male
-            voice_config: { stability: 0.55, similarity_boost: 0.80, style: 0.2, use_speaker_boost: true }
-          }
+          provider: buildProvider()
         },
         config: { fluent: true, pad_audio: 0.2 }
       })
     });
     const data = await resp.json();
+    // Surface D-ID errors instead of failing silently (insufficient credits, invalid voice, etc.)
+    if (!resp.ok) {
+      console.error('D-ID speak failed:', resp.status, JSON.stringify(data));
+      return res.status(resp.status).json({ error: data.description || data.message || 'D-ID speak failed', details: data });
+    }
     res.json(data);
   } catch (e) {
+    console.error('speak error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });

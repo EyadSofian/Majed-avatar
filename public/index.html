@@ -202,13 +202,18 @@ body {
 .av-wrap.thinking  .av-circle { border-color:rgba(245,158,11,.5); }
 .av-wrap.speaking  .av-circle { border-color:rgba(59,130,246,.5); }
 
-#avideo { width:100%; height:100%; object-fit:cover; display:none; }
-
-.av-ph {
+/* Avatar image + video are layered: image behind, video on top.
+   Video covers the image only when it actually renders frames, so the
+   circle is never empty (fixes "image disappears" issue). */
+.av-circle { position:relative; }
+#avideo, #avPh {
+  position:absolute; inset:0;
   width:100%; height:100%;
-  display:flex; align-items:center; justify-content:center;
-  background:linear-gradient(180deg,var(--en-600) 0%,var(--en-700) 100%);
+  object-fit:cover; object-position:top center;
 }
+#avPh   { z-index:1; }
+#avideo { z-index:2; opacity:0; transition:opacity .5s var(--ease-expo); }
+#avideo.live { opacity:1; }
 
 /* ── Identity ────────────────────────────────────────── */
 .identity { text-align:center; margin-bottom:16px; }
@@ -439,11 +444,10 @@ body {
       <div class="av-ring"   aria-hidden="true"></div>
       <div class="av-ripple" aria-hidden="true"></div>
       <div class="av-circle">
-        <video id="avideo" autoplay playsinline></video>
         <img id="avPh"
           src="https://i.ibb.co/m5zdZVNN/Gemini-Generated-Image-99rafj99rafj99ra-1.png"
-          alt="م. ماجد"
-          style="width:100%;height:100%;object-fit:cover;object-position:top center;">
+          alt="م. ماجد">
+        <video id="avideo" autoplay playsinline muted></video>
       </div>
     </div>
 
@@ -591,16 +595,15 @@ async function initDID() {
 
     S.pc.ontrack = (e) => {
       if (!e.streams[0]) return;
-      // Always update srcObject so both audio + video tracks are captured
+      // Bind the full stream (audio + video). Keep MUTED so the browser
+      // allows autoplay of the idle stream — we unmute on first user gesture.
       $video.srcObject = e.streams[0];
-      $video.muted = false;
-      if (e.track.kind === 'video') {
-        $video.style.display = 'block';
-        $avPh.style.display  = 'none';
-      }
-      // play() is required after srcObject changes in some browsers
       $video.play().catch(() => {});
     };
+
+    // Reveal the video only once it actually has frames (avoids empty circle)
+    $video.addEventListener('playing', () => $video.classList.add('live'));
+    $video.addEventListener('loadeddata', () => $video.play().catch(() => {}));
 
     S.pc.onicecandidate = async ({ candidate }) => {
       if (!candidate) return;
@@ -675,17 +678,28 @@ async function sendToMajed(text) {
     S.history.push({ role:'model', parts:[{ text:reply }] });
     showCard(reply);
 
+    let didSpeak = false;
     if (S.connected && S.streamId) {
       setMode('speaking');
-      await fetch('/api/did/speak', {
+      const sr = await fetch('/api/did/speak', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ streamId:S.streamId, sessionId:S.sessionId, text:reply })
       });
-      setTimeout(() => setMode('idle'), reply.length * 85 + 1500);
-    } else {
-      // Browser TTS fallback
+      if (sr.ok) {
+        didSpeak = true;
+        setTimeout(() => setMode('idle'), reply.length * 85 + 1500);
+      } else {
+        // D-ID couldn't speak (e.g. ElevenLabs needs paid plan / out of credits)
+        const err = await sr.json().catch(() => ({}));
+        console.warn('D-ID speak failed:', err);
+      }
+    }
+
+    if (!didSpeak) {
+      // Browser TTS fallback — at least the user hears the reply
+      try { speechSynthesis.cancel(); } catch {}
       const utt = new SpeechSynthesisUtterance(reply);
-      utt.lang = 'ar-SA';
+      utt.lang = 'ar-EG';
       utt.onend = () => setMode('idle');
       setMode('speaking');
       speechSynthesis.speak(utt);
